@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ИССД «Футболёры»</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700&display=swap');
+
+  :root {
+    --bg-dark: #07090e;
+    --card-bg: rgba(18, 22, 31, 0.92);
+    --border-color: rgba(255, 255, 255, 0.12);
+    --gold: #f5c518;
+    --cyan: #00c3ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Montserrat', sans-serif;
+    background: var(--bg-dark);
+    color: #f0f4fc;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .stripes-bg { position: fixed; inset: 0; display: flex; width: 100%; height: 100%; z-index: -1; opacity: 0.35; }
+  .stripe { flex: 1; height: 100%; position: relative; overflow: hidden; }
+  .stripe-inner {
+    position: absolute; top: -50%; left: 0; width: 100%; height: 200%;
+    animation: waveLight 8s ease-in-out infinite alternate;
+  }
+  .stripe:nth-child(1) .stripe-inner { animation-delay: 0s; }
+  .stripe:nth-child(2) .stripe-inner { animation-delay: -2s; }
+  .stripe:nth-child(3) .stripe-inner { animation-delay: -4s; }
+  .stripe:nth-child(4) .stripe-inner { animation-delay: -6s; }
+  @keyframes waveLight { 0% { transform: translateY(0%); } 100% { transform: translateY(10%); } }
+
+  .stripe:nth-child(odd) .stripe-inner { background: linear-gradient(180deg, #d61800 0%, #ff8c00 50%, #d61800 100%); }
+  .stripe:nth-child(even) .stripe-inner { background: linear-gradient(180deg, #c41400 0%, #ffd700 50%, #c41400 100%); }
+
+  .app-container { width: 100%; max-width: 440px; z-index: 10; }
+  .header { text-align: center; margin-bottom: 20px; }
+  .header h1 { font-size: 22px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; }
+
+  .player-card {
+    background: var(--card-bg); border: 1px solid var(--border-color);
+    border-radius: 20px; padding: 28px 22px; backdrop-filter: blur(15px);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+  }
+
+  .player-info { text-align: center; margin-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 18px; }
+  .player-id-tag { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--gold); border: 1px solid var(--gold); padding: 3px 10px; border-radius: 6px; display: inline-block; margin-bottom: 10px; }
+  .player-name { font-size: 22px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 15px; }
+  .stat-box { background: rgba(13, 17, 24, 0.8); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px 10px; text-align: center; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700; margin-bottom: 2px; }
+  .stat-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #8b99ad; }
+
+  .transfer-highlight { grid-column: span 2; border: 1px solid rgba(0, 195, 255, 0.3); background: linear-gradient(135deg, rgba(0, 195, 255, 0.1) 0%, rgba(13, 17, 24, 0.8) 100%); }
+
+  .awards-box { background: rgba(245, 197, 24, 0.05); border: 1px dashed rgba(245, 197, 24, 0.4); border-radius: 12px; padding: 14px; text-align: center; }
+  .award-badge { display: inline-block; background: rgba(0,0,0,0.5); border: 1px solid var(--gold); font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px; margin: 3px; }
+  
+  .footer-sync { text-align: center; margin-top: 18px; font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; }
+  .loading-state { text-align: center; padding: 40px; }
+  .spinner { width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid var(--gold); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+  <div class="stripes-bg">
+    <div class="stripe"><div class="stripe-inner"></div></div>
+    <div class="stripe"><div class="stripe-inner"></div></div>
+    <div class="stripe"><div class="stripe-inner"></div></div>
+    <div class="stripe"><div class="stripe-inner"></div></div>
+  </div>
+
+  <div class="app-container">
+    <div class="header"><h1>ФУТБОЛЁРЫ</h1></div>
+
+    <div class="player-card">
+      <div id="loadingState" class="loading-state"><div class="spinner"></div>Синхронизация...</div>
+
+      <div id="cardContent" style="display: none;">
+        <div class="player-info">
+          <span class="player-id-tag" id="playerIdTag">ID: ---</span>
+          <h2 class="player-name" id="playerName">Загрузка...</h2>
+          <span id="playerCity" style="font-size: 12px; color: #8b99ad; text-transform: uppercase;">---</span>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box"><div class="stat-value" style="color: #ff9100;" id="statGoals">0</div><div class="stat-label">Голы</div></div>
+          <div class="stat-box"><div class="stat-value" style="color: #ffd700;" id="statMVP">0</div><div class="stat-label">MVP</div></div>
+          <div class="stat-box"><div class="stat-value" style="color: #ff5555;" id="statSHB">0</div><div class="stat-label">Штраф (ШБ)</div></div>
+          <div class="stat-box"><div class="stat-value" style="color: #ffd21f;" id="statJK">0</div><div class="stat-label">ЖК</div></div>
+          <div class="stat-box transfer-highlight">
+            <div class="stat-value" style="color: var(--cyan);" id="statTransfer">0 ₽</div>
+            <div class="stat-label">Трансферная стоимость</div>
+          </div>
+        </div>
+
+        <div class="awards-box" id="awardsBox">
+          <div id="awardsList"></div>
+        </div>
+
+        <div class="footer-sync">ИССД «ФУТБОЛЁРЫ»</div>
+      </div>
+      <div id="errorState" style="display: none; text-align: center; color: #ff5555; padding: 20px;"></div>
+    </div>
+  </div>
+
+  <script>
+    // Ссылка уже вшита строго на ваш ID таблицы и Лист 2 (gid=1158837812)
+    const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1KOLcO16mAIRqHzZ4sxDXfURgmFrg1JGwDqGi5SLpNrg/gviz/tq?tqx=out:csv&gid=1158837812';
+
+    async function loadPlayerCard() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetId = (urlParams.get('id') || '').trim().toLowerCase();
+
+      try {
+        const response = await fetch(GOOGLE_SHEET_URL);
+        const csvText = await response.text();
+        const rows = csvText.split('\n').map(row => row.split(',').map(col => col.replace(/^"(.*)"$/, '$1')));
+
+        let p = null;
+        for (let row of rows) {
+          if (row[0] && row[0].trim().toLowerCase() === targetId) {
+            p = { 
+              id: row[0], 
+              name: row[1], 
+              city: row[2], 
+              goals: row[3], 
+              mvp: row[4], 
+              shb: row[5], 
+              jk: row[6], 
+              transfer: row[7], 
+              awards: row[8] 
+            };
+            break;
+          }
+        }
+
+        document.getElementById('loadingState').style.display = 'none';
+        if (p) {
+          document.getElementById('cardContent').style.display = 'block';
+          document.getElementById('playerIdTag').innerText = 'ID: ' + p.id;
+          document.getElementById('playerName').innerText = p.name;
+          document.getElementById('playerCity').innerText = p.city;
+          document.getElementById('statGoals').innerText = p.goals;
+          document.getElementById('statMVP').innerText = p.mvp;
+          document.getElementById('statSHB').innerText = p.shb;
+          document.getElementById('statJK').innerText = p.jk;
+          document.getElementById('statTransfer').innerText = p.transfer.includes('₽') ? p.transfer : p.transfer + ' ₽';
+          
+          const aList = document.getElementById('awardsList');
+          if (p.awards && p.awards.trim()) {
+            aList.innerHTML = p.awards.split(',').map(a => `<span class="award-badge">${a.trim()}</span>`).join('');
+          } else {
+            aList.innerHTML = '<span style="font-size: 11px; color: #64748b;">Достижений пока нет</span>';
+          }
+        } else {
+          document.getElementById('errorState').style.display = 'block';
+          document.getElementById('errorState').innerHTML = `<b>Игрок с ID "${targetId.toUpperCase()}" не найден.</b><br><br>Убедитесь, что в адресной строке указан правильный параметр (например: <code>?id=FTB-001</code>).`;
+        }
+      } catch (e) {
+        document.getElementById('loadingState').style.display = 'none';
+        document.getElementById('errorState').style.display = 'block';
+        document.getElementById('errorState').innerText = 'Ошибка загрузки данных из Google Таблицы.';
+      }
+    }
+    window.onload = loadPlayerCard;
+  </script>
+</body>
+</html>
