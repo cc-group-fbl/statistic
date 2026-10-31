@@ -248,6 +248,10 @@
         <form id="createMemberForm" style="margin-top:12px">
           <label class="muted" for="memberUsername">Логин (латиница, цифры, _ или -)</label>
           <input id="memberUsername" class="field" minlength="3" maxlength="30" pattern="[A-Za-z0-9_-]{3,30}" autocomplete="off" placeholder="Например: player02" required />
+          <label class="muted" for="memberFirstName">Имя</label>
+          <input id="memberFirstName" class="field" maxlength="80" autocomplete="off" placeholder="Например: Иван" required />
+          <label class="muted" for="memberLastName">Фамилия</label>
+          <input id="memberLastName" class="field" maxlength="100" autocomplete="off" placeholder="Например: Петров" required />
           <label class="muted" for="memberPlayerId">ID игрока</label>
           <input id="memberPlayerId" class="field" maxlength="50" placeholder="Например: FTB-002" required />
           <label class="muted" for="memberPassword">Временный пароль (минимум 8 символов)</label>
@@ -395,22 +399,26 @@
       if(!root||!sb||currentProfile?.role!=='admin') return;
       root.textContent='Загрузка пользователей…';
       const {data,error}=await sb.from('profiles')
-        .select('user_id,username,player_id,role,captain_team').order('username',{ascending:true});
+        .select('user_id,username,first_name,last_name,player_id,role,captain_team').order('username',{ascending:true});
       root.replaceChildren();
       if(error||!data){root.textContent='Не удалось загрузить пользователей. Проверьте права чтения таблицы profiles.';return;}
       if(!data.length){root.textContent='Пользователей пока нет.';return;}
       data.forEach(p=>{
         const item=document.createElement('div');
         item.style.cssText='padding:10px 0;border-top:1px solid rgba(255,255,255,.12);font-size:12px;overflow-wrap:anywhere';
-        const name=document.createElement('div');name.style.fontWeight='800';name.textContent=p.username||'Без логина';
-        const meta=document.createElement('div');meta.className='muted';meta.textContent='ID игрока: '+(p.player_id||'—');
+        const name=document.createElement('div');name.style.fontWeight='800';name.textContent=(p.first_name||p.last_name)?[p.first_name,p.last_name].filter(Boolean).join(' ')+' · '+(p.username||'Без логина'):(p.username||'Без логина');
+        const firstName=document.createElement('input');firstName.className='field';firstName.style.marginTop='8px';firstName.maxLength=80;firstName.placeholder='Имя';firstName.value=p.first_name||'';
+        const lastName=document.createElement('input');lastName.className='field';lastName.style.marginTop='6px';lastName.maxLength=100;lastName.placeholder='Фамилия';lastName.value=p.last_name||'';
+        const meta=document.createElement('div');meta.className='muted';meta.textContent='Логин: '+(p.username||'—')+' · ID игрока: '+(p.player_id||'—');
+        const saveNames=document.createElement('button');saveNames.type='button';saveNames.className='small-btn';saveNames.style.marginTop='6px';saveNames.textContent='Сохранить имя и фамилию';
+        saveNames.addEventListener('click',async()=>{const first_name=firstName.value.trim(),last_name=lastName.value.trim();if(!first_name||!last_name){alert('Заполните имя и фамилию.');return;}saveNames.disabled=true;const {error}=await sb.from('profiles').update({first_name,last_name}).eq('user_id',p.user_id);saveNames.disabled=false;if(error){alert('Не удалось сохранить имя и фамилию: '+error.message+' Если столбцы ещё не созданы, выполните SQL-файл из репозитория.');return;}p.first_name=first_name;p.last_name=last_name;name.textContent=first_name+' '+last_name+' · '+(p.username||'Без логина');saveNames.textContent='Сохранено ✓';});
         const role=document.createElement('select');role.className='field';role.style.marginTop='6px';
         [['member','Участник'],['captain','Капитан'],['admin','Администратор']].forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;role.appendChild(o)});
         role.value=['member','captain','admin'].includes(p.role)?p.role:'member';
         role.addEventListener('change',async()=>{const {error}=await sb.from('profiles').update({role:role.value}).eq('user_id',p.user_id);if(error){alert('Не удалось изменить роль. Проверьте SQL-права и политики Supabase.');role.value=p.role||'member';}else{p.role=role.value;}});
         const team=document.createElement('select');team.className='field';team.style.marginTop='6px';[['','Не капитан'],['ДЕРЕВЕНСКИЕ','Капитан ФК ДЕРЕВЕНСКИЕ'],['ГОРОДСКИЕ','Капитан ФК ГОРОДСКИЕ']].forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;team.appendChild(o)});team.value=p.captain_team||'';
         team.addEventListener('change',async()=>{const {error}=await sb.from('profiles').update({captain_team:team.value||null,role:team.value?'captain':role.value}).eq('user_id',p.user_id);if(error){alert('Не удалось назначить команду капитана. Сначала выполните SQL-настройку.');team.value=p.captain_team||'';}else{p.captain_team=team.value||null;if(team.value)role.value='captain';}});
-        item.append(name,meta,role,team);root.appendChild(item);
+        item.append(name,meta,firstName,lastName,saveNames,role,team);root.appendChild(item);
       });
       const note=document.createElement('div');note.className='muted';note.style.marginTop='8px';
       note.textContent='Всего пользователей: '+data.length;root.appendChild(note);
@@ -638,22 +646,30 @@
         return setMessage('createMemberMessage','Создавать пользователей может только администратор.',true);
       }
       const username=$('memberUsername').value.trim().toLowerCase();
+      const first_name=$('memberFirstName').value.trim();
+      const last_name=$('memberLastName').value.trim();
       const player_id=$('memberPlayerId').value.trim();
       const password=$('memberPassword').value;
       if (!/^[a-z0-9_-]{3,30}$/.test(username)) return setMessage('createMemberMessage','Логин должен содержать 3–30 символов: латинские буквы, цифры, _ или -.',true);
+      if (!first_name || !last_name) return setMessage('createMemberMessage','Укажите имя и фамилию пользователя.',true);
       if (!player_id) return setMessage('createMemberMessage','Укажите ID игрока.',true);
       if (password.length < 8 || password.length > 72) return setMessage('createMemberMessage','Пароль должен содержать от 8 до 72 символов.',true);
       const button=$('createMemberButton'); button.disabled=true; setMessage('createMemberMessage','Создаём участника…');
       try {
-        const {data,error}=await sb.functions.invoke('create-member',{body:{username,player_id,password}});
+        const {data,error}=await sb.functions.invoke('create-member',{body:{username,first_name,last_name,player_id,password}});
         if (error) {
           let detail='';
           try { if (error.context && typeof error.context.json === 'function') { const payload=await error.context.json(); detail=payload.error || payload.message || ''; } } catch (_) {}
           throw new Error(detail || error.message || 'Ошибка вызова функции');
         }
         if (!data || !data.success) throw new Error((data && data.error) || 'Сервер не подтвердил создание аккаунта');
+        const {data:createdProfile,error:profileLookupError}=await sb.from('profiles').select('user_id').eq('username',username).maybeSingle();
+        if(profileLookupError || !createdProfile) throw new Error('Аккаунт создан, но профиль не найден для сохранения имени и фамилии. Обновите список пользователей и заполните данные вручную.');
+        const {error:profileUpdateError}=await sb.from('profiles').update({first_name,last_name}).eq('user_id',createdProfile.user_id);
+        if(profileUpdateError) throw new Error('Аккаунт создан, но имя и фамилию сохранить не удалось: '+profileUpdateError.message);
         $('createMemberForm').reset();
-        setMessage('createMemberMessage','Участник создан: '+data.username+' · '+data.player_id+'. Передайте ему логин и временный пароль безопасным способом.');
+        setMessage('createMemberMessage','Участник создан: '+first_name+' '+last_name+' · '+data.username+' · '+data.player_id+'. Передайте ему логин и временный пароль безопасным способом.');
+        await loadAdminUsers();
       } catch(err) {
         setMessage('createMemberMessage','Не удалось создать участника: '+(err.message||'ошибка')+'. Проверьте, что функция create-member опубликована и вы вошли как admin.',true);
       } finally { button.disabled=false; }
