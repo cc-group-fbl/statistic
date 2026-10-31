@@ -401,24 +401,79 @@
       const {data,error}=await sb.from('profiles')
         .select('user_id,username,first_name,last_name,player_id,role,captain_team').order('username',{ascending:true});
       root.replaceChildren();
-      if(error||!data){root.textContent='Не удалось загрузить пользователей. Проверьте права чтения таблицы profiles.';return;}
+      if(error||!data){root.textContent='Не удалось загрузить пользователей: '+(error?.message||'ошибка чтения profiles');return;}
       if(!data.length){root.textContent='Пользователей пока нет.';return;}
       data.forEach(p=>{
         const item=document.createElement('div');
-        item.style.cssText='padding:10px 0;border-top:1px solid rgba(255,255,255,.12);font-size:12px;overflow-wrap:anywhere';
-        const name=document.createElement('div');name.style.fontWeight='800';name.textContent=(p.first_name||p.last_name)?[p.first_name,p.last_name].filter(Boolean).join(' ')+' · '+(p.username||'Без логина'):(p.username||'Без логина');
-        const firstName=document.createElement('input');firstName.className='field';firstName.style.marginTop='8px';firstName.maxLength=80;firstName.placeholder='Имя';firstName.value=p.first_name||'';
-        const lastName=document.createElement('input');lastName.className='field';lastName.style.marginTop='6px';lastName.maxLength=100;lastName.placeholder='Фамилия';lastName.value=p.last_name||'';
-        const meta=document.createElement('div');meta.className='muted';meta.textContent='Логин: '+(p.username||'—')+' · ID игрока: '+(p.player_id||'—');
-        const saveNames=document.createElement('button');saveNames.type='button';saveNames.className='small-btn';saveNames.style.marginTop='6px';saveNames.textContent='Сохранить имя и фамилию';
-        saveNames.addEventListener('click',async()=>{const first_name=firstName.value.trim(),last_name=lastName.value.trim();if(!first_name||!last_name){alert('Заполните имя и фамилию.');return;}saveNames.disabled=true;const {error}=await sb.from('profiles').update({first_name,last_name}).eq('user_id',p.user_id);saveNames.disabled=false;if(error){alert('Не удалось сохранить имя и фамилию: '+error.message+' Если столбцы ещё не созданы, выполните SQL-файл из репозитория.');return;}p.first_name=first_name;p.last_name=last_name;name.textContent=first_name+' '+last_name+' · '+(p.username||'Без логина');saveNames.textContent='Сохранено ✓';});
-        const role=document.createElement('select');role.className='field';role.style.marginTop='6px';
-        [['member','Участник'],['captain','Капитан'],['admin','Администратор']].forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;role.appendChild(o)});
+        item.style.cssText='padding:12px 0;border-top:1px solid rgba(255,255,255,.12);font-size:12px;overflow-wrap:anywhere';
+        const name=document.createElement('div');
+        name.style.fontWeight='800';
+        name.textContent=(p.first_name||p.last_name)?[p.first_name,p.last_name].filter(Boolean).join(' ')+' · '+(p.username||'Без логина'):(p.username||'Без логина');
+
+        const firstName=document.createElement('input');
+        firstName.className='field';firstName.style.marginTop='8px';firstName.maxLength=80;
+        firstName.placeholder='Имя';firstName.value=p.first_name||'';
+        const lastName=document.createElement('input');
+        lastName.className='field';lastName.style.marginTop='6px';lastName.maxLength=100;
+        lastName.placeholder='Фамилия';lastName.value=p.last_name||'';
+        const playerId=document.createElement('input');
+        playerId.className='field';playerId.style.marginTop='6px';playerId.maxLength=40;
+        playerId.placeholder='ID игрока';playerId.value=p.player_id||'';
+
+        const meta=document.createElement('div');
+        meta.className='muted';meta.style.textAlign='left';
+        meta.textContent='Логин: '+(p.username||'—');
+
+        const role=document.createElement('select');
+        role.className='field';role.style.marginTop='6px';
+        [['member','Участник'],['captain','Капитан'],['admin','Администратор']].forEach(([v,label])=>{
+          const o=document.createElement('option');o.value=v;o.textContent=label;role.appendChild(o);
+        });
         role.value=['member','captain','admin'].includes(p.role)?p.role:'member';
-        role.addEventListener('change',async()=>{const {error}=await sb.from('profiles').update({role:role.value}).eq('user_id',p.user_id);if(error){alert('Не удалось изменить роль. Проверьте SQL-права и политики Supabase.');role.value=p.role||'member';}else{p.role=role.value;}});
-        const team=document.createElement('select');team.className='field';team.style.marginTop='6px';[['','Не капитан'],['ДЕРЕВЕНСКИЕ','Капитан ФК ДЕРЕВЕНСКИЕ'],['ГОРОДСКИЕ','Капитан ФК ГОРОДСКИЕ']].forEach(([v,label])=>{const o=document.createElement('option');o.value=v;o.textContent=label;team.appendChild(o)});team.value=p.captain_team||'';
-        team.addEventListener('change',async()=>{const {error}=await sb.from('profiles').update({captain_team:team.value||null,role:team.value?'captain':role.value}).eq('user_id',p.user_id);if(error){alert('Не удалось назначить команду капитана. Сначала выполните SQL-настройку.');team.value=p.captain_team||'';}else{p.captain_team=team.value||null;if(team.value)role.value='captain';}});
-        item.append(name,meta,firstName,lastName,saveNames,role,team);root.appendChild(item);
+
+        const team=document.createElement('select');
+        team.className='field';team.style.marginTop='6px';
+        [['','Не капитан'],['ДЕРЕВЕНСКИЕ','Капитан ФК ДЕРЕВЕНСКИЕ'],['ГОРОДСКИЕ','Капитан ФК ГОРОДСКИЕ']].forEach(([v,label])=>{
+          const o=document.createElement('option');o.value=v;o.textContent=label;team.appendChild(o);
+        });
+        team.value=p.captain_team||'';
+
+        const save=document.createElement('button');
+        save.type='button';save.className='small-btn';save.style.marginTop='8px';
+        save.textContent='Сохранить изменения';
+        const status=document.createElement('div');status.className='muted';status.setAttribute('aria-live','polite');
+        save.addEventListener('click',async()=>{
+          const first_name=firstName.value.trim();
+          const last_name=lastName.value.trim();
+          const player_id=playerId.value.trim();
+          let selectedRole=role.value;
+          const captain_team=team.value||null;
+          if(!first_name||!last_name||!player_id){status.textContent='Заполните имя, фамилию и ID игрока.';return;}
+          if(captain_team) selectedRole='captain';
+          save.disabled=true;status.textContent='Сохраняем…';
+          try{
+            const {data:result,error:saveError}=await sb.rpc('update_member_profile',{
+              p_user_id:p.user_id,
+              p_first_name:first_name,
+              p_last_name:last_name,
+              p_player_id:player_id,
+              p_role:selectedRole,
+              p_captain_team:captain_team
+            });
+            if(saveError) throw saveError;
+            if(result?.success===false) throw new Error(result.message||'Сервер не подтвердил сохранение.');
+            p.first_name=first_name;p.last_name=last_name;p.player_id=player_id;
+            p.role=selectedRole;p.captain_team=captain_team;
+            role.value=selectedRole;
+            name.textContent=first_name+' '+last_name+' · '+(p.username||'Без логина');
+            meta.textContent='Логин: '+(p.username||'—')+' · ID игрока: '+player_id;
+            status.textContent='Изменения сохранены ✓';
+          }catch(err){
+            status.textContent='Не удалось сохранить: '+(err.message||'ошибка Supabase');
+          }finally{save.disabled=false;}
+        });
+        item.append(name,meta,firstName,lastName,playerId,role,team,save,status);
+        root.appendChild(item);
       });
       const note=document.createElement('div');note.className='muted';note.style.marginTop='8px';
       note.textContent='Всего пользователей: '+data.length;root.appendChild(note);
